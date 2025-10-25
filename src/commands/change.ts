@@ -259,7 +259,7 @@ export class ChangeCommand {
   }
 
   private extractTitle(content: string, changeName: string): string {
-    const match = content.match(/^#\s+(?:Change:\s+)?(.+)$/m);
+    const match = content.match(/^#\s+(?:Change:\s+)?(.+)$/im);
     return match ? match[1].trim() : changeName;
   }
 
