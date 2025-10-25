@@ -678,26 +678,20 @@ export class InitCommand {
     openspecPath: string,
     config: OpenSpecConfig
   ): Promise<void> {
-    const context: ProjectContext = {
-      // Could be enhanced with prompts for project details
-    };
-
-    const templates = TemplateManager.getTemplates(context);
-
-    for (const template of templates) {
-      const filePath = path.join(openspecPath, template.path);
-      const content =
-        typeof template.content === 'function'
-          ? template.content(context)
-          : template.content;
-
-      await FileSystemUtils.writeFile(filePath, content);
-    }
+    await this.writeTemplateFiles(openspecPath, config, false);
   }
 
   private async ensureTemplateFiles(
     openspecPath: string,
     config: OpenSpecConfig
+  ): Promise<void> {
+    await this.writeTemplateFiles(openspecPath, config, true);
+  }
+
+  private async writeTemplateFiles(
+    openspecPath: string,
+    config: OpenSpecConfig,
+    skipExisting: boolean
   ): Promise<void> {
     const context: ProjectContext = {
       // Could be enhanced with prompts for project details
@@ -708,15 +702,17 @@ export class InitCommand {
     for (const template of templates) {
       const filePath = path.join(openspecPath, template.path);
 
-      // Only write if file doesn't exist
-      if (!(await FileSystemUtils.fileExists(filePath))) {
-        const content =
-          typeof template.content === 'function'
-            ? template.content(context)
-            : template.content;
-
-        await FileSystemUtils.writeFile(filePath, content);
+      // Skip if file exists and we're in skipExisting mode
+      if (skipExisting && (await FileSystemUtils.fileExists(filePath))) {
+        continue;
       }
+
+      const content =
+        typeof template.content === 'function'
+          ? template.content(context)
+          : template.content;
+
+      await FileSystemUtils.writeFile(filePath, content);
     }
   }
 
