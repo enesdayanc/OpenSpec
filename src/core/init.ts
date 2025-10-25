@@ -21,6 +21,7 @@ import {
   AI_TOOLS,
   OPENSPEC_DIR_NAME,
   AIToolOption,
+  OPENSPEC_MARKERS,
 } from './config.js';
 import { PALETTE } from './styles/palette.js';
 
@@ -388,7 +389,7 @@ export class InitCommand {
 
     // Validation happens silently in the background
     const extendMode = await this.validate(projectPath, openspecPath);
-    const existingToolStates = await this.getExistingToolStates(projectPath);
+    const existingToolStates = await this.getExistingToolStates(projectPath, extendMode);
 
     this.renderBanner(extendMode);
 
@@ -627,12 +628,25 @@ export class InitCommand {
   }
 
   private async getExistingToolStates(
-    projectPath: string
+    projectPath: string,
+    extendMode: boolean
   ): Promise<Record<string, boolean>> {
     const states: Record<string, boolean> = {};
-    for (const tool of AI_TOOLS) {
-      states[tool.value] = await this.isToolConfigured(projectPath, tool.value);
+
+    // Only check tool configuration if OpenSpec is already initialized (extend mode)
+    // This prevents false "already configured" messages when users have existing
+    // tool config files (like CLAUDE.md) that weren't created by OpenSpec
+    if (extendMode) {
+      for (const tool of AI_TOOLS) {
+        states[tool.value] = await this.isToolConfigured(projectPath, tool.value);
+      }
+    } else {
+      // Fresh initialization - no tools configured yet
+      for (const tool of AI_TOOLS) {
+        states[tool.value] = false;
+      }
     }
+
     return states;
   }
 
@@ -640,22 +654,68 @@ export class InitCommand {
     projectPath: string,
     toolId: string
   ): Promise<boolean> {
-    const configFile = ToolRegistry.get(toolId)?.configFileName;
-    if (
-      configFile &&
-      (await FileSystemUtils.fileExists(path.join(projectPath, configFile)))
-    )
-      return true;
+    // A tool is only considered "configured by OpenSpec" if BOTH conditions are met:
+    // 1. Config file (e.g., CLAUDE.md) exists with OpenSpec markers
+    // 2. At least one slash command file exists with OpenSpec markers
 
-    const slashConfigurator = SlashCommandRegistry.get(toolId);
-    if (!slashConfigurator) return false;
-    for (const target of slashConfigurator.getTargets()) {
-      const absolute = slashConfigurator.resolveAbsolutePath(
-        projectPath,
-        target.id
-      );
-      if (await FileSystemUtils.fileExists(absolute)) return true;
+    let hasConfigFile = false;
+    let hasSlashCommands = false;
+
+    // Check if the tool has a config file with OpenSpec markers
+    const configFile = ToolRegistry.get(toolId)?.configFileName;
+    if (configFile) {
+      const configPath = path.join(projectPath, configFile);
+      if (await FileSystemUtils.fileExists(configPath)) {
+        try {
+          const content = await FileSystemUtils.readFile(configPath);
+          hasConfigFile = content.includes(OPENSPEC_MARKERS.start) && content.includes(OPENSPEC_MARKERS.end);
+        } catch {
+          // If we can't read the file, treat it as not configured
+          hasConfigFile = false;
+        }
+      }
     }
+
+    // Check if slash command files exist with OpenSpec markers
+    const slashConfigurator = SlashCommandRegistry.get(toolId);
+    if (slashConfigurator) {
+      for (const target of slashConfigurator.getTargets()) {
+        const absolute = slashConfigurator.resolveAbsolutePath(
+          projectPath,
+          target.id
+        );
+        if (await FileSystemUtils.fileExists(absolute)) {
+          try {
+            const content = await FileSystemUtils.readFile(absolute);
+            if (content.includes(OPENSPEC_MARKERS.start) && content.includes(OPENSPEC_MARKERS.end)) {
+              hasSlashCommands = true;
+              break; // Found at least one valid slash command
+            }
+          } catch {
+            // If we can't read the file, continue checking others
+            continue;
+          }
+        }
+      }
+    }
+
+    // Tool is only configured if BOTH exist with markers
+    // OR if the tool has no config file requirement (slash commands only)
+    // OR if the tool has no slash commands requirement (config file only)
+    const hasConfigFileRequirement = configFile !== undefined;
+    const hasSlashCommandRequirement = slashConfigurator !== undefined;
+
+    if (hasConfigFileRequirement && hasSlashCommandRequirement) {
+      // Both are required - both must be present with markers
+      return hasConfigFile && hasSlashCommands;
+    } else if (hasConfigFileRequirement) {
+      // Only config file required
+      return hasConfigFile;
+    } else if (hasSlashCommandRequirement) {
+      // Only slash commands required
+      return hasSlashCommands;
+    }
+
     return false;
   }
 
