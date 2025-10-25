@@ -580,45 +580,41 @@ describe('InitCommand', () => {
     });
 
     it('should recreate deleted openspec/AGENTS.md in extend mode', async () => {
-      queueSelections('claude', DONE, DONE);
-
-      // First init
-      await initCommand.execute(testDir);
-
-      const openspecAgentsPath = path.join(testDir, 'openspec', 'AGENTS.md');
-      expect(await fileExists(openspecAgentsPath)).toBe(true);
-
-      // Delete the file
-      await fs.unlink(openspecAgentsPath);
-      expect(await fileExists(openspecAgentsPath)).toBe(false);
-
-      // Run init again - should recreate the file
-      await initCommand.execute(testDir);
-      expect(await fileExists(openspecAgentsPath)).toBe(true);
-
-      const content = await fs.readFile(openspecAgentsPath, 'utf-8');
-      expect(content).toContain('OpenSpec Instructions');
+      await testFileRecreationInExtendMode(
+        testDir,
+        initCommand,
+        'openspec/AGENTS.md',
+        'OpenSpec Instructions'
+      );
     });
 
     it('should recreate deleted openspec/project.md in extend mode', async () => {
+      await testFileRecreationInExtendMode(
+        testDir,
+        initCommand,
+        'openspec/project.md',
+        'Project Context'
+      );
+    });
+
+    it('should preserve existing template files in extend mode', async () => {
       queueSelections('claude', DONE, DONE);
 
       // First init
       await initCommand.execute(testDir);
 
-      const projectMdPath = path.join(testDir, 'openspec', 'project.md');
-      expect(await fileExists(projectMdPath)).toBe(true);
+      const agentsPath = path.join(testDir, 'openspec', 'AGENTS.md');
+      const customContent = '# My Custom AGENTS Content\nDo not overwrite this!';
 
-      // Delete the file
-      await fs.unlink(projectMdPath);
-      expect(await fileExists(projectMdPath)).toBe(false);
+      // Modify the file with custom content
+      await fs.writeFile(agentsPath, customContent);
 
-      // Run init again - should recreate the file
+      // Run init again - should NOT overwrite
       await initCommand.execute(testDir);
-      expect(await fileExists(projectMdPath)).toBe(true);
 
-      const content = await fs.readFile(projectMdPath, 'utf-8');
-      expect(content).toContain('Project Context');
+      const content = await fs.readFile(agentsPath, 'utf-8');
+      expect(content).toBe(customContent);
+      expect(content).not.toContain('OpenSpec Instructions');
     });
 
     it('should handle non-existent target directory', async () => {
@@ -1120,6 +1116,32 @@ describe('InitCommand', () => {
     });
   });
 });
+
+async function testFileRecreationInExtendMode(
+  testDir: string,
+  initCommand: InitCommand,
+  relativePath: string,
+  expectedContent: string
+): Promise<void> {
+  queueSelections('claude', DONE, DONE);
+
+  // First init
+  await initCommand.execute(testDir);
+
+  const filePath = path.join(testDir, relativePath);
+  expect(await fileExists(filePath)).toBe(true);
+
+  // Delete the file
+  await fs.unlink(filePath);
+  expect(await fileExists(filePath)).toBe(false);
+
+  // Run init again - should recreate the file
+  await initCommand.execute(testDir);
+  expect(await fileExists(filePath)).toBe(true);
+
+  const content = await fs.readFile(filePath, 'utf-8');
+  expect(content).toContain(expectedContent);
+}
 
 async function fileExists(filePath: string): Promise<boolean> {
   try {
