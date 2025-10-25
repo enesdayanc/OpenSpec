@@ -631,32 +631,35 @@ export class InitCommand {
     projectPath: string,
     extendMode: boolean
   ): Promise<Record<string, boolean>> {
-    const states: Record<string, boolean> = {};
-
-    // Only check tool configuration if OpenSpec is already initialized (extend mode)
-    // This prevents false "already configured" messages when users have existing
-    // tool config files (like CLAUDE.md) that weren't created by OpenSpec
-    if (extendMode) {
-      for (const tool of AI_TOOLS) {
-        states[tool.value] = await this.isToolConfigured(projectPath, tool.value);
-      }
-    } else {
-      // Fresh initialization - no tools configured yet
-      for (const tool of AI_TOOLS) {
-        states[tool.value] = false;
-      }
+    // Fresh initialization - no tools configured yet
+    if (!extendMode) {
+      return Object.fromEntries(AI_TOOLS.map(t => [t.value, false]));
     }
 
-    return states;
+    // Extend mode - check all tools in parallel for better performance
+    const entries = await Promise.all(
+      AI_TOOLS.map(async (t) => [t.value, await this.isToolConfigured(projectPath, t.value)] as const)
+    );
+    return Object.fromEntries(entries);
   }
 
   private async isToolConfigured(
     projectPath: string,
     toolId: string
   ): Promise<boolean> {
-    // A tool is only considered "configured by OpenSpec" if BOTH conditions are met:
-    // 1. Config file (e.g., CLAUDE.md) exists with OpenSpec markers
-    // 2. At least one slash command file exists with OpenSpec markers
+    // A tool is only considered "configured by OpenSpec" if its files contain OpenSpec markers.
+    // For tools with both config files and slash commands, BOTH must have markers.
+    // For slash commands, at least one file with markers is sufficient (not all required).
+
+    // Helper to check if a file exists and contains OpenSpec markers
+    const fileHasMarkers = async (absolutePath: string): Promise<boolean> => {
+      try {
+        const content = await FileSystemUtils.readFile(absolutePath);
+        return content.includes(OPENSPEC_MARKERS.start) && content.includes(OPENSPEC_MARKERS.end);
+      } catch {
+        return false;
+      }
+    };
 
     let hasConfigFile = false;
     let hasSlashCommands = false;
@@ -665,36 +668,17 @@ export class InitCommand {
     const configFile = ToolRegistry.get(toolId)?.configFileName;
     if (configFile) {
       const configPath = path.join(projectPath, configFile);
-      if (await FileSystemUtils.fileExists(configPath)) {
-        try {
-          const content = await FileSystemUtils.readFile(configPath);
-          hasConfigFile = content.includes(OPENSPEC_MARKERS.start) && content.includes(OPENSPEC_MARKERS.end);
-        } catch {
-          // If we can't read the file, treat it as not configured
-          hasConfigFile = false;
-        }
-      }
+      hasConfigFile = (await FileSystemUtils.fileExists(configPath)) && (await fileHasMarkers(configPath));
     }
 
-    // Check if slash command files exist with OpenSpec markers
+    // Check if any slash command file exists with OpenSpec markers
     const slashConfigurator = SlashCommandRegistry.get(toolId);
     if (slashConfigurator) {
       for (const target of slashConfigurator.getTargets()) {
-        const absolute = slashConfigurator.resolveAbsolutePath(
-          projectPath,
-          target.id
-        );
-        if (await FileSystemUtils.fileExists(absolute)) {
-          try {
-            const content = await FileSystemUtils.readFile(absolute);
-            if (content.includes(OPENSPEC_MARKERS.start) && content.includes(OPENSPEC_MARKERS.end)) {
-              hasSlashCommands = true;
-              break; // Found at least one valid slash command
-            }
-          } catch {
-            // If we can't read the file, continue checking others
-            continue;
-          }
+        const absolute = slashConfigurator.resolveAbsolutePath(projectPath, target.id);
+        if ((await FileSystemUtils.fileExists(absolute)) && (await fileHasMarkers(absolute))) {
+          hasSlashCommands = true;
+          break; // At least one file with markers is sufficient
         }
       }
     }
