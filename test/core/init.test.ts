@@ -579,6 +579,48 @@ describe('InitCommand', () => {
       await expect(initCommand.execute(testDir)).resolves.toBeUndefined();
     });
 
+    it('should recreate deleted openspec/AGENTS.md in extend mode', async () => {
+      queueSelections('claude', DONE, DONE);
+
+      // First init
+      await initCommand.execute(testDir);
+
+      const openspecAgentsPath = path.join(testDir, 'openspec', 'AGENTS.md');
+      expect(await fileExists(openspecAgentsPath)).toBe(true);
+
+      // Delete the file
+      await fs.unlink(openspecAgentsPath);
+      expect(await fileExists(openspecAgentsPath)).toBe(false);
+
+      // Run init again - should recreate the file
+      await initCommand.execute(testDir);
+      expect(await fileExists(openspecAgentsPath)).toBe(true);
+
+      const content = await fs.readFile(openspecAgentsPath, 'utf-8');
+      expect(content).toContain('OpenSpec Instructions');
+    });
+
+    it('should recreate deleted openspec/project.md in extend mode', async () => {
+      queueSelections('claude', DONE, DONE);
+
+      // First init
+      await initCommand.execute(testDir);
+
+      const projectMdPath = path.join(testDir, 'openspec', 'project.md');
+      expect(await fileExists(projectMdPath)).toBe(true);
+
+      // Delete the file
+      await fs.unlink(projectMdPath);
+      expect(await fileExists(projectMdPath)).toBe(false);
+
+      // Run init again - should recreate the file
+      await initCommand.execute(testDir);
+      expect(await fileExists(projectMdPath)).toBe(true);
+
+      const content = await fs.readFile(projectMdPath, 'utf-8');
+      expect(content).toContain('Project Context');
+    });
+
     it('should handle non-existent target directory', async () => {
       queueSelections('claude', DONE);
 

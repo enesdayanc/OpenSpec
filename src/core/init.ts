@@ -427,9 +427,11 @@ export class InitCommand {
     } else {
       ora({ stream: process.stdout }).info(
         PALETTE.midGray(
-          'ℹ OpenSpec already initialized. Skipping base scaffolding.'
+          'ℹ OpenSpec already initialized. Checking for missing files...'
         )
       );
+      await this.createDirectoryStructure(openspecPath);
+      await this.ensureTemplateFiles(openspecPath, config);
     }
 
     // Step 2: Configure AI tools
@@ -690,6 +692,31 @@ export class InitCommand {
           : template.content;
 
       await FileSystemUtils.writeFile(filePath, content);
+    }
+  }
+
+  private async ensureTemplateFiles(
+    openspecPath: string,
+    config: OpenSpecConfig
+  ): Promise<void> {
+    const context: ProjectContext = {
+      // Could be enhanced with prompts for project details
+    };
+
+    const templates = TemplateManager.getTemplates(context);
+
+    for (const template of templates) {
+      const filePath = path.join(openspecPath, template.path);
+
+      // Only write if file doesn't exist
+      if (!(await FileSystemUtils.fileExists(filePath))) {
+        const content =
+          typeof template.content === 'function'
+            ? template.content(context)
+            : template.content;
+
+        await FileSystemUtils.writeFile(filePath, content);
+      }
     }
   }
 
