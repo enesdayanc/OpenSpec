@@ -114,6 +114,47 @@ Old slash content
     consoleSpy.mockRestore();
   });
 
+  it('should refresh existing Gemini slash command files', async () => {
+      const proposalPath = path.join(
+          testDir,
+          '.gemini/commands/openspec/proposal.md'
+      );
+      await fs.mkdir(path.dirname(proposalPath), { recursive: true });
+      const initialContent = `---
+name: OpenSpec: Proposal
+description: Old description
+category: OpenSpec
+tags: [openspec, change]
+---
+<!-- OPENSPEC:START -->
+Old slash content
+<!-- OPENSPEC:END -->`;
+      await fs.writeFile(proposalPath, initialContent);
+
+      const consoleSpy = vi.spyOn(console, 'log');
+
+      await updateCommand.execute(testDir);
+
+      const updated = await fs.readFile(proposalPath, 'utf-8');
+      expect(updated).toContain('name: OpenSpec: Proposal');
+      expect(updated).toContain('**Guardrails**');
+      expect(updated).toContain(
+          'Validate with `openspec validate <id> --strict`'
+      );
+      expect(updated).not.toContain('Old slash content');
+
+      const [logMessage] = consoleSpy.mock.calls[0];
+      expect(logMessage).toContain(
+          'Updated OpenSpec instructions (openspec/AGENTS.md'
+      );
+      expect(logMessage).toContain('AGENTS.md (created)');
+      expect(logMessage).toContain(
+          'Updated slash commands: .gemini/commands/openspec/proposal.md'
+      );
+
+      consoleSpy.mockRestore();
+    });
+
   it('should not create CLAUDE.md if it does not exist', async () => {
     // Ensure CLAUDE.md does not exist
     const claudePath = path.join(testDir, 'CLAUDE.md');
@@ -123,6 +164,18 @@ Old slash content
 
     // Check that CLAUDE.md was not created
     const fileExists = await FileSystemUtils.fileExists(claudePath);
+    expect(fileExists).toBe(false);
+  });
+
+  it('should not create GEMINI.md if it does not exist', async () => {
+    // Ensure GEMINI.md does not exist
+    const geminiPath = path.join(testDir, 'GEMINI.md');
+
+    // Execute update command
+    await updateCommand.execute(testDir);
+
+    // Check that GEMINI.md was not created
+    const fileExists = await FileSystemUtils.fileExists(geminiPath);
     expect(fileExists).toBe(false);
   });
 

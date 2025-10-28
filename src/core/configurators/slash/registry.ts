@@ -1,5 +1,6 @@
 import { SlashCommandConfigurator } from './base.js';
 import { ClaudeSlashCommandConfigurator } from './claude.js';
+import { GeminiSlashCommandConfigurator } from './gemini.js';
 import { CodeBuddySlashCommandConfigurator } from './codebuddy.js';
 import { CursorSlashCommandConfigurator } from './cursor.js';
 import { WindsurfSlashCommandConfigurator } from './windsurf.js';
@@ -18,6 +19,7 @@ export class SlashCommandRegistry {
 
   static {
     const claude = new ClaudeSlashCommandConfigurator();
+    const gemini = new GeminiSlashCommandConfigurator();
     const codeBuddy = new CodeBuddySlashCommandConfigurator();
     const cursor = new CursorSlashCommandConfigurator();
     const windsurf = new WindsurfSlashCommandConfigurator();
@@ -32,6 +34,7 @@ export class SlashCommandRegistry {
     const crush = new CrushSlashCommandConfigurator();
 
     this.configurators.set(claude.toolId, claude);
+    this.configurators.set(gemini.toolId, gemini);
     this.configurators.set(codeBuddy.toolId, codeBuddy);
     this.configurators.set(cursor.toolId, cursor);
     this.configurators.set(windsurf.toolId, windsurf);

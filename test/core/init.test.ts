@@ -118,6 +118,21 @@ describe('InitCommand', () => {
       expect(content).toContain('<!-- OPENSPEC:END -->');
     });
 
+    it('should create GEMINI.md when Gemini Code is selected', async () => {
+      queueSelections('gemini', DONE);
+
+      await initCommand.execute(testDir);
+
+      const geminiPath = path.join(testDir, 'GEMINI.md');
+      expect(await fileExists(geminiPath)).toBe(true);
+
+      const content = await fs.readFile(geminiPath, 'utf-8');
+      expect(content).toContain('<!-- OPENSPEC:START -->');
+      expect(content).toContain("@/openspec/AGENTS.md");
+      expect(content).toContain('openspec update');
+      expect(content).toContain('<!-- OPENSPEC:END -->');
+    });
+
     it('should update existing CLAUDE.md with markers', async () => {
       queueSelections('claude', DONE);
 
@@ -129,6 +144,24 @@ describe('InitCommand', () => {
       await initCommand.execute(testDir);
 
       const updatedContent = await fs.readFile(claudePath, 'utf-8');
+      expect(updatedContent).toContain('<!-- OPENSPEC:START -->');
+      expect(updatedContent).toContain("@/openspec/AGENTS.md");
+      expect(updatedContent).toContain('openspec update');
+      expect(updatedContent).toContain('<!-- OPENSPEC:END -->');
+      expect(updatedContent).toContain('Custom instructions here');
+    });
+
+    it('should update existing GEMINI.md with markers', async () => {
+      queueSelections('gemini', DONE);
+
+      const geminiPath = path.join(testDir, 'GEMINI.md');
+      const existingContent =
+          '# My Project Instructions\nCustom instructions here';
+      await fs.writeFile(geminiPath, existingContent);
+
+      await initCommand.execute(testDir);
+
+      const updatedContent = await fs.readFile(geminiPath, 'utf-8');
       expect(updatedContent).toContain('<!-- OPENSPEC:START -->');
       expect(updatedContent).toContain("@/openspec/AGENTS.md");
       expect(updatedContent).toContain('openspec update');
@@ -267,6 +300,45 @@ describe('InitCommand', () => {
       expect(archiveContent).toContain('openspec archive <id>');
       expect(archiveContent).toContain(
         '`--skip-specs` only for tooling-only work'
+      );
+    });
+
+    it('should create Gemini slash command files with templates', async () => {
+      queueSelections('gemini', DONE);
+
+      await initCommand.execute(testDir);
+
+      const geminiProposal = path.join(
+          testDir,
+          '.gemini/commands/openspec/proposal.md'
+      );
+      const geminiApply = path.join(
+          testDir,
+          '.gemini/commands/openspec/apply.md'
+      );
+      const geminiArchive = path.join(
+          testDir,
+          '.gemini/commands/openspec/archive.md'
+      );
+
+      expect(await fileExists(geminiProposal)).toBe(true);
+      expect(await fileExists(geminiApply)).toBe(true);
+      expect(await fileExists(geminiArchive)).toBe(true);
+
+      const proposalContent = await fs.readFile(geminiProposal, 'utf-8');
+      expect(proposalContent).toContain('name: OpenSpec: Proposal');
+      expect(proposalContent).toContain('<!-- OPENSPEC:START -->');
+      expect(proposalContent).toContain('**Guardrails**');
+
+      const applyContent = await fs.readFile(geminiApply, 'utf-8');
+      expect(applyContent).toContain('name: OpenSpec: Apply');
+      expect(applyContent).toContain('Work through tasks sequentially');
+
+      const archiveContent = await fs.readFile(geminiArchive, 'utf-8');
+      expect(archiveContent).toContain('name: OpenSpec: Archive');
+      expect(archiveContent).toContain('openspec archive <id>');
+      expect(archiveContent).toContain(
+          '`--skip-specs` only for tooling-only work'
       );
     });
 
@@ -1107,6 +1179,25 @@ describe('InitCommand', () => {
       );
 
       expect(claudeChoice.configured).toBe(false);
+    });
+
+    it('should NOT show tools as already configured in fresh project with existing GEMINI.md', async () => {
+      // Simulate user having their own GEMINI.md before running openspec init
+      const geminiPath = path.join(testDir, 'GEMINI.md');
+      await fs.writeFile(geminiPath, '# My Custom Gemini Instructions\n');
+
+      queueSelections('gemini', DONE);
+
+      await initCommand.execute(testDir);
+
+      // In the first run (non-interactive mode via queueSelections),
+      // the prompt is called with configured: false for gemini
+      const firstCallArgs = mockPrompt.mock.calls[0][0];
+      const geminiChoice = firstCallArgs.choices.find(
+          (choice: any) => choice.value === 'gemini'
+      );
+
+      expect(geminiChoice.configured).toBe(false);
     });
 
     it('should NOT show tools as already configured in fresh project with existing slash commands', async () => {
